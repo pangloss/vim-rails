@@ -2971,7 +2971,7 @@ function! s:migspc(line)
 endfunction
 
 function! s:invertrange(beg,end)
-  let str = []
+  let inverted_cmds = []
   let lnum = a:beg
   while lnum <= a:end
     let line = getline(lnum)
@@ -3027,16 +3027,16 @@ function! s:invertrange(beg,end)
     elseif add == " "
       let add = ""
     endif
-    let str += [add]
+    let inverted_cmds += [add]
     let lnum += 1
   endwhile
   let index = 0
-  while index < len(str)
-      let item = str[index]
-      let str[index] = s:gsub(item,'(\s*raise ActiveRecord::IrreversableMigration\n)+','\1')
+  while index < len(inverted_cmds)
+      let item = inverted_cmds[index]
+      let inverted_cmds[index] = s:gsub(item,'(\s*raise ActiveRecord::IrreversableMigration\n)+','\1')
     let index = index + 1
   endwhile
-  return str
+  return inverted_cmds
 endfunction
 
 function! s:Invert(bang)
@@ -3048,8 +3048,8 @@ function! s:Invert(bang)
     let up_error = "Couldn't parse self.up method"
     return s:error(up_error)
   endif
-  let inverted_text = s:invertrange(up_beg+1,up_end-1)
-  if inverted_text[0] == -1
+  let inverted_cmds = s:invertrange(up_beg+1,up_end-1)
+  if inverted_cmds[0] == -1
     let range_error = "Could not invert self.up"
     return s:error(range_error)
   endif
@@ -3065,8 +3065,8 @@ function! s:Invert(bang)
   if down_beg + 1 < down_end
     exe (down_beg+1).",".(down_end-1)."delete _"
   endif
-  if !empty(inverted_text)
-    call append(down_beg,inverted_text)
+  if !empty(inverted_cmds)
+    call append(down_beg,inverted_cmds)
   else
     let bad_str = "Emtpy string on Invert"
     return s:error(bad_str)
