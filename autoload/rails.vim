@@ -2971,7 +2971,7 @@ function! s:migspc(line)
 endfunction
 
 function! s:invertrange(beg,end)
-  let str = ""
+  let str = []
   let lnum = a:beg
   while lnum <= a:end
     let line = getline(lnum)
@@ -3020,56 +3020,56 @@ function! s:invertrange(beg,end)
       let lnum = s:endof(lnum)
     endif
     if lnum == 0
-      return -1
+      return [-1]
     endif
     if add == ""
       let add = s:sub(line,'^\s*\zs.*','raise ActiveRecord::IrreversableMigration')
     elseif add == " "
       let add = ""
     endif
-    let str = add."\n".str
+    let str += [add]
     let lnum += 1
   endwhile
-  let str = s:gsub(str,'(\s*raise ActiveRecord::IrreversableMigration\n)+','\1')
+  let index = 0
+  while index < len(str)
+      let item = str[index]
+      let str[index] = s:gsub(item,'(\s*raise ActiveRecord::IrreversableMigration\n)+','\1')
+    let index = index + 1
+  endwhile
   return str
 endfunction
 
 function! s:Invert(bang)
-  let err = "Could not parse method"
   let src = "up"
   let dst = "down"
-  let beg = search('\%('.&l:define.'\).*'.src.'\>',"w")
-  let end = s:endof(beg)
-  if beg + 1 == end
-    let src = "down"
-    let dst = "up"
-    let beg = search('\%('.&l:define.'\).*'.src.'\>',"w")
-    let end = s:endof(beg)
+  let up_beg = search('\%('.&l:define.'\).*'.src.'\>',"w")
+  let up_end = s:endof(up_beg)
+  if !up_beg || !up_end
+    let up_error = "Couldn't parse self.up method"
+    return s:error(up_error)
   endif
-  if !beg || !end
-    return s:error(err)
+  let inverted_text = s:invertrange(up_beg+1,up_end-1)
+  if inverted_text[0] == -1
+    let range_error = "Could not invert self.up"
+    return s:error(range_error)
   endif
-  let str = s:invertrange(beg+1,end-1)
-  if str == -1
-    return s:error(err)
+  let down_beg = search('\%('.&l:define.'\).*'.dst.'\>',"w")
+  let down_end = s:endof(down_beg)
+  if !down_beg || !down_end
+    let down_error = "Could not parse self.down"
+    return s:error(down_error)
   endif
-  let beg = search('\%('.&l:define.'\).*'.dst.'\>',"w")
-  let end = s:endof(beg)
-  if !beg || !end
-    return s:error(err)
+  if foldclosed(down_beg) > 0
+    exe down_beg."foldopen!"
   endif
-  if foldclosed(beg) > 0
-    exe beg."foldopen!"
+  if down_beg + 1 < down_end
+    exe (down_beg+1).",".(down_end-1)."delete _"
   endif
-  if beg + 1 < end
-    exe (beg+1).",".(end-1)."delete _"
-  endif
-  if str != ""
-    let reg_keep = @"
-    let @" = str
-    exe beg."put"
-    exe 1+beg
-    let @" = reg_keep
+  if !empty(inverted_text)
+    call append(down_beg,inverted_text)
+  else
+    let bad_str = "Emtpy string on Invert"
+    return s:error(bad_str)
   endif
 endfunction
 
