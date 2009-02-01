@@ -2953,11 +2953,6 @@ endfunction
 " }}}1
 " Migration Inversion {{{1
 
-function! s:mkeep(str)
-  " Things to keep (like comments) from a migration statement
-  return matchstr(a:str,' #[^{].*')
-endfunction
-
 function! s:mextargs(str,num)
   if a:str =~ '^\s*\w\+\s*('
     return s:sub(matchstr(a:str,'^\s*\w\+\s*\zs(\%([^,)]\+[,)]\)\{,'.a:num.'\}'),',$',')')
@@ -2966,111 +2961,122 @@ function! s:mextargs(str,num)
   endif
 endfunction
 
-function! s:migspc(line)
-  return matchstr(a:line,'^\s*')
-endfunction
-
-function! s:invertrange(beg,end)
-  let inverted_cmds = []
-  let lnum = a:beg
-  while lnum <= a:end
-    let line = getline(lnum)
-    let add = ""
-    if line == ''
-      let add = ' '
-    elseif line =~ '^\s*\(#[^{].*\)\=$'
-      let add = line
-    elseif line =~ '\<create_table\>'
-      let add = s:migspc(line)."drop_table".s:mextargs(line,1).s:mkeep(line)
-      let lnum = s:endof(lnum)
-    elseif line =~ '\<drop_table\>'
-      let add = s:sub(line,'<drop_table>\s*\(=\s*([^,){ ]*).*','create_table \1 do |t|'."\n".matchstr(line,'^\s*').'end').s:mkeep(line)
-    elseif line =~ '\<add_column\>'
-      let add = s:migspc(line).'remove_column'.s:mextargs(line,2).s:mkeep(line)
-    elseif line =~ '\<remove_column\>'
-      let add = s:sub(line,'<remove_column>','add_column')
-    elseif line =~ '\<add_index\>'
-      let add = s:migspc(line).'remove_index'.s:mextargs(line,1)
-      let mat = matchstr(line,':name\s*=>\s*\zs[^ ,)]*')
-      if mat != ''
-        let add = s:sub(add,'\)=$',', :name => '.mat.'&')
-      else
-        let mat = matchstr(line,'\<add_index\>[^,]*,\s*\zs\%(\[[^]]*\]\|[:"'."'".']\w*["'."'".']\=\)')
-        if mat != ''
-          let add = s:sub(add,'\)=$',', :column => '.mat.'&')
-        endif
-      endif
-      let add .= s:mkeep(line)
-    elseif line =~ '\<remove_index\>'
-      let add = s:sub(s:sub(line,'<remove_index','add_index'),':column\s*=>\s*','')
-    elseif line =~ '\<rename_\%(table\|column\)\>'
-      let add = s:sub(line,'<rename_%(table\s*\(=\s*|column\s*\(=\s*[^,]*,\s*)\zs([^,]*)(,\s*)([^,]*)','\3\2\1')
-    elseif line =~ '\<change_column\>'
-      let add = s:migspc(line).'change_column'.s:mextargs(line,2).s:mkeep(line)
-    elseif line =~ '\<change_column_default\>'
-      let add = s:migspc(line).'change_column_default'.s:mextargs(line,2).s:mkeep(line)
-    elseif line =~ '\.update_all(\(["'."'".']\).*\1)$' || line =~ '\.update_all \(["'."'".']\).*\1$'
-      " .update_all('a = b') => .update_all('b = a')
-      let pre = matchstr(line,'^.*\.update_all[( ][}'."'".'"]')
-      let post = matchstr(line,'["'."'".'])\=$')
-      let mat = strpart(line,strlen(pre),strlen(line)-strlen(pre)-strlen(post))
-      let mat = s:gsub(','.mat.',','%(,\s*)@<=([^ ,=]{-})(\s*\=\s*)([^,=]{-})%(\s*,)@=','\3\2\1')
-      let add = pre.s:sub(s:sub(mat,'^,',''),',$','').post
-    elseif line =~ '^s\*\%(if\|unless\|while\|until\|for\)\>'
-      let lnum = s:endof(lnum)
-    endif
-    if lnum == 0
-      return [-1]
-    endif
-    if add == ""
-      let add = s:sub(line,'^\s*\zs.*','raise ActiveRecord::IrreversableMigration')
-    elseif add == " "
-      let add = ""
-    endif
-    let inverted_cmds += [add]
-    let lnum += 1
-  endwhile
-  let index = 0
-  while index < len(inverted_cmds)
-      let item = inverted_cmds[index]
-      let inverted_cmds[index] = s:gsub(item,'(\s*raise ActiveRecord::IrreversableMigration\n)+','\1')
-    let index = index + 1
-  endwhile
-  return inverted_cmds
-endfunction
-
 function! s:Invert(bang)
-  let src = "up"
-  let dst = "down"
-  let up_beg = search('\%('.&l:define.'\).*'.src.'\>',"w")
-  let up_end = s:endof(up_beg)
-  if !up_beg || !up_end
-    let up_error = "Couldn't parse self.up method"
-    return s:error(up_error)
-  endif
-  let inverted_cmds = s:invertrange(up_beg+1,up_end-1)
-  if inverted_cmds[0] == -1
-    let range_error = "Could not invert self.up"
-    return s:error(range_error)
-  endif
-  let down_beg = search('\%('.&l:define.'\).*'.dst.'\>',"w")
-  let down_end = s:endof(down_beg)
-  if !down_beg || !down_end
-    let down_error = "Could not parse self.down"
-    return s:error(down_error)
-  endif
-  if foldclosed(down_beg) > 0
-    exe down_beg."foldopen!"
-  endif
-  if down_beg + 1 < down_end
-    exe (down_beg+1).",".(down_end-1)."delete _"
-  endif
-  if !empty(inverted_cmds)
-    call append(down_beg,inverted_cmds)
-  else
-    let bad_str = "Emtpy string on Invert"
-    return s:error(bad_str)
-  endif
+  ruby << EOF
+    module VIM
+      def self.comment(str)
+        # grabs comments
+        str.match(/\s*#[^{].*/) ? $~[0] : ''
+      end
+
+      def self.args(str, i)
+        VIM::evaluate("s:mextargs(\"#{str}\", #{i})")
+      end
+
+      def self.indentation(str)
+        str.match(/^\s*/) ? $~[0] : ''
+      end
+
+      class Buffer
+        def each
+          1.upto(length) do |i|
+            yield self[i]
+          end
+        end
+
+        def each_with_index
+          1.upto(length) do |i|
+            yield self[i], i
+          end
+        end
+
+        def index_of(pattern)
+          self.each_with_index {|line, i| return i if line.match(pattern) }
+        end
+
+        def end_of(i)
+          VIM::evaluate("s:endof(#{i})").to_i
+        end
+
+        def error(msg)
+          VIM::evaluate("s:error(\"#{msg}\")")
+        end
+
+        def open_fold_at(i)
+#          VIM::evaluate("
+#          if foldclosed(#{i}) > 0
+#            exe '#{i}foldopen!'
+#          endif"
+        end
+
+        def remove_between(start, finish)
+          return if start + 1 == finish
+          (start+1..finish-1).to_a.reverse.each {|i| self.delete(i) }
+        end
+
+        def multi_append(start, lines)
+          (start..(start+lines.length-1)).each {|i| self.append(i, lines[i-start]) }
+        end
+      end
+    end
+
+    def invert_range(start, finish)
+      inverted_cmds = []
+      i = start
+      while(i <= finish)
+        line = $curbuf[i]
+        inverted_cmds << case line
+        when /^\s*#[^{].*$/
+          line
+        when /\bcreate_table\b/
+          i = $curbuf.end_of(i)
+          "#{VIM::indentation(line)}drop_table#{VIM::args(line, 1)}#{VIM::comment(line)}"
+        when /\bdrop_table\b/
+          inverted_cmds << line.gsub(/drop_table\s*([^,){ ]*).*/, "create_table #{'\1'} do |t|")
+          "#{VIM::indentation(line)}end#{VIM::comment(line)}"
+        when /\badd_column\b/
+          "#{VIM::indentation(line)}remove_column#{VIM::args(line, 2)}#{VIM::comment(line)}"
+        when /\bremove_column\b/
+          line.gsub(/\bremove_column\b/, 'add_column')
+        when /\badd_index\b(.*)/
+          "#{VIM::indentation(line)}remove_index#{$~[1]}"
+        when /\bremove_index\b(.*)/
+          line.gsub(/\bremove_index\b/, 'add_index').gsub(/:column\s*=>\s*/, '')
+        when /\brename_(table|column)\b/
+          line.gsub(/(\brename_(table|column)\b)\s+([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*/, '\1 \3 \5 \4')
+        when /\.update_all$/, /\bchange_column(\b|_default\b)/
+          # bleh, it's not worth it
+          "##{line}"
+        when /^\s*(if|unless|while|until|for)/
+          i = $curbuf.end_of(i)
+        end
+        raise "Error parsing migration, aborting" if i < 1
+        i += 1
+      end
+      inverted_cmds.compact
+    end
+
+    up_start = $curbuf.index_of(/def\s*self.up/)
+    up_end = $curbuf.end_of(up_start)
+    unless up_start > 0 && up_end > up_start
+      return VIM::evaluate("s:error('Couldn't parse self.up method')")
+    end
+    inverted_cmds = []
+    begin
+      inverted_cmds = invert_range(up_start+1, up_end+1)
+    rescue Exception => e
+      return $curbuf.error(e.message)
+    end
+    down_start = $curbuf.index_of(/def\s*self.down/)
+    down_end = $curbuf.end_of(down_start)
+    unless down_start > 0 && down_end > down_start
+      return $curbuf.error("Couldn't parse self.down method")
+    end
+
+    $curbuf.open_fold_at(down_start)
+    $curbuf.remove_between(down_start, down_end)
+    $curbuf.multi_append(down_start, inverted_cmds)
+EOF
 endfunction
 
 " }}}1
