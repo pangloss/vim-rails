@@ -45,6 +45,7 @@ task :install do
   files.each do |file|
     target_file = File.join(vimfiles, file)
     FileUtils.mkdir_p(File.dirname(target_file))
+    FileUtils.rm(target_file) rescue nil
     FileUtils.cp(file, target_file)
     puts "  Copied #{file} to #{target_file}"
   end
