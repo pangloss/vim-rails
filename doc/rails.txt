@@ -523,9 +523,6 @@ in an initialization routine of some sort (e.g., an autocommand); see
 			model, controller, or both (as with :Rintegrationtest)
 			is used as a default.
 
-						*rails-:Rcommand*
-:Rcommand		Deprecated alias for |:Rnavcommand|
-
 Examples: >
 	Rnavcommand api      app/apis -glob=**/* -suffix=_api.rb
 	Rnavcommand config   config   -glob=*.*  -suffix= -default=routes.rb
