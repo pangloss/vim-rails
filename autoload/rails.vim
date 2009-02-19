@@ -1874,9 +1874,13 @@ endfunction
 " }}}1
 " File Finders {{{1
 
-function! s:addfilecmds(type)
+function! s:addfilecmds(type, ...)
   let l = s:sub(a:type,'^.','\l&')
-  let cmds = 'ESVT '
+  if a:0 == 1
+    let cmds = a:1
+  else
+    let cmds = 'ESVT '
+  endif
   let cmd = ''
   while cmds != ''
     let cplt = " -complete=customlist,".s:sid.l."List"
@@ -1902,7 +1906,7 @@ function! s:BufFinderCommands()
     call s:addfilecmds("functionaltest")
   endif
   if rails#app().test_suites('test')
-    call s:addfilecmds("integrationtest")
+    call s:addfilecmds("integrationtest", 'EST ')
   endif
   if rails#app().test_suites('spec')
     call s:addfilecmds("spec")
@@ -1913,7 +1917,7 @@ function! s:BufFinderCommands()
   call s:addfilecmds("task")
   call s:addfilecmds("lib")
   call s:addfilecmds("environment")
-  call s:addfilecmds("initializer")
+  call s:addfilecmds("initializer", 'EST ') " Don't generate RVinitializer to save trouble with Rview
 endfunction
 
 function! s:completion_filter(results,A)
