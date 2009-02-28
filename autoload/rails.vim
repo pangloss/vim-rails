@@ -2002,7 +2002,7 @@ function! s:stylesheetList(A,L,P)
 endfunction
 
 function! s:javascriptList(A,L,P)
-  return s:completion_filter(rails#app().relglob("public/javascripts/","**/*",".js"),a:A)
+  return s:completion_filter(rails#app().relglob("public/javascripts/","**/*",".js")+rails#app().relglob("app/javascripts/","**/*",".js"),a:A)
 endfunction
 
 function! s:metalList(A,L,P)
@@ -2406,7 +2406,12 @@ function! s:stylesheetEdit(bang,cmd,...)
 endfunction
 
 function! s:javascriptEdit(bang,cmd,...)
-  return s:EditSimpleRb(a:bang,a:cmd,"javascript",a:0? a:1 : "application","public/javascripts/",".js",1)
+  let file = a:0? a:1 : "application"
+  let prefix = "app/javascripts/"
+  if !rails#app().has_file(prefix.file.".js")
+    prefix = "public/javascripts/"
+  endif
+  return s:EditSimpleRb(a:bang,a:cmd,"javascript",file,prefix,".js",1)
 endfunction
 
 function! s:unittestEdit(bang,cmd,...)
@@ -2673,7 +2678,13 @@ function! s:AlternateFile()
   elseif f =~ '\<application\.js$'
     return "app/helpers/application_helper.rb"
   elseif t =~ '^js\>'
-    return "public/javascripts/application.js"
+    let sprockets = "app/javascripts/application.js"
+    let rails = "public/javascripts/application.js"
+    if filereadable(sprockets)
+      return sprockets
+    else
+      return rails
+    endif
   elseif f =~ '\<db/schema\.rb$'
     return rails#app().migration('')
   elseif t =~ '^view\>'
@@ -2822,7 +2833,13 @@ function! s:RelatedFile()
   elseif f =~ '\<application\.js$'
     return "app/helpers/application_helper.rb"
   elseif t =~ '^js\>'
-    return "public/javascripts/application.js"
+    let sprockets = "app/javascripts/application.js"
+    let rails = "public/javascripts/application.js"
+    if filereadable(sprockets)
+      return sprockets
+    else
+      return rails
+    endif
   elseif t =~ '^view-layout\>'
     return s:sub(s:sub(s:sub(f,'/views/','/controllers/'),'/layouts/(\k+)\..*$','/\1_controller.rb'),'<application_controller\.rb$','application.rb')
   elseif t =~ '^view\>'
