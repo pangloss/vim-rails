@@ -78,7 +78,7 @@ module VIM
         when /\bremove_index\b(.*)/
           line.gsub(/\bremove_index\b/, 'add_index').gsub(/:column\s*=>\s*/, '')
         when /\brename_(table|column)\b/
-          line.gsub(/(\brename_(table|column)\b)\s+([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*/, '\1 \3 \5 \4')
+          line.gsub(/(\brename_(table|column)\b)\s+([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*/, '\1 \3, \5, \4')
         when /\.update_all$/, /\bchange_column(\b|_default\b)/
           # bleh, it's not worth it
           "##{line}"
