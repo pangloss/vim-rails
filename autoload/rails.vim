@@ -3032,7 +3032,7 @@ endfunction
 function! s:Invert(bang)
   ruby << EOF
 
-    require '~/.vim/autoload/vim.rb'  # make the ruby lib into a gem to solve this problem
+    require '~/.vim/autoload/rails.rb'  # make the ruby lib into a gem to solve this problem
     Vim::Rails::rinvert!
 
 EOF
